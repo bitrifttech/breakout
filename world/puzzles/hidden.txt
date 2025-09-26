@@ -1,1 +1,1 @@
-# Placeholder for world/puzzles/hidden.txt
+CLUE: Try building a reusable script to parse CSV files faster.
