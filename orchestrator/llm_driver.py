@@ -49,10 +49,13 @@ class LLMDriver:
             return seg
         elif self.mode == "api":
             prompt = self._read_prompt()
+            ctx = self._read_context()
             content = (
                 f"{prompt}\n\n"
-                "You are the Orchestrator. Produce ONLY the pre-exec Action Protocol block with tags "
-                "<Intent>, <Command>, <Expected>, <OnError>. Do not add any extra commentary."
+                f"Recent context (latest first):\n{ctx}\n\n"
+                "You are the Orchestrator. Use the most recent <Next> from the post-exec block to drive your "
+                "next action. Do NOT repeat the same <Command> as the previous step. Produce ONLY the pre-exec "
+                "Action Protocol block with tags <Intent>, <Command>, <Expected>, <OnError>. No extra commentary."
             )
             return self._invoke_llm(content)
         else:
@@ -81,10 +84,13 @@ class LLMDriver:
             return seg
         elif self.mode == "api":
             prompt = self._read_prompt()
+            ctx = self._read_context()
             content = (
                 f"{prompt}\n\n"
-                "You are the Orchestrator. Produce ONLY the post-exec Action Protocol block with tags "
-                "<Observation>, <Inference>, <Next>. Do not add any extra commentary."
+                f"Recent context (latest first):\n{ctx}\n\n"
+                "You are the Orchestrator. Reflect concisely on the just-executed command and outcome. "
+                "Produce ONLY the post-exec Action Protocol block with tags <Observation>, <Inference>, <Next>. "
+                "No extra commentary."
             )
             return self._invoke_llm(content)
         else:
@@ -94,6 +100,16 @@ class LLMDriver:
     def _read_prompt(self) -> str:
         try:
             with open(self._prompt_path, "r", encoding="utf-8") as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+
+    def _read_context(self) -> str:
+        path = os.getenv("RUN_CONTEXT")
+        if not path:
+            return ""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
                 return f.read()
         except FileNotFoundError:
             return ""

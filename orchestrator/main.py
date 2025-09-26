@@ -72,6 +72,7 @@ def main():
     # Environment variables (resolved after .env load)
     llm_mode = os.getenv("LLM_MODE", "manual")
     local_container = os.getenv("AGENT_CONTAINER", "breakout_agent")
+    print_thoughts = os.getenv("PRINT_THOUGHTS", "1").lower() not in ("0", "false", "no")
 
     driver = LLMDriver(mode=llm_mode)
 
@@ -80,6 +81,10 @@ def main():
     runs_root = os.getenv("RUNS_DIR", os.path.join(REPO_ROOT, "runs"))
     run_dir = os.path.join(runs_root, timestamp)
     os.makedirs(run_dir, exist_ok=True)
+
+    # Set up run context file for LLM API mode to consume
+    context_path = os.path.join(run_dir, "context.txt")
+    os.environ.setdefault("RUN_CONTEXT", context_path)
 
     # Write meta.json
     with open(PROMPT_PATH, "r", encoding="utf-8") as pf:
@@ -99,6 +104,9 @@ def main():
     events_file = open(events_path, "a")
 
     step = 0
+    last_command = None
+    repeat_count = 0
+    max_repeat = int(os.getenv("MAX_REPEAT", "3"))
     while True:
         step += 1
         print(f"Step {step}")
@@ -107,6 +115,9 @@ def main():
         pre_exec = driver.decide()
         if not pre_exec:
             break
+        if print_thoughts and pre_exec.strip():
+            print("=== Pre-exec (LLM) ===")
+            print(pre_exec)
 
         # Extract command
         try:
@@ -114,6 +125,21 @@ def main():
         except ValueError as e:
             print(f"Error: {e}")
             continue
+
+        # Loop guard: stop if the same command repeats too many times
+        if command == last_command:
+            repeat_count += 1
+        else:
+            repeat_count = 0
+        last_command = command
+        if repeat_count >= max_repeat - 1:
+            guard_event = {
+                "t": time.time(),
+                "guard": f"breaking due to repeated command '{command}' seen {repeat_count + 1} times"
+            }
+            events_file.write(json.dumps(guard_event) + "\n")
+            events_file.flush()
+            break
 
         # Execute command
         start_time = time.time()
@@ -144,6 +170,20 @@ def main():
         events_file.write(json.dumps(event) + "\n")
         events_file.flush()
 
+        # Append to run context (trim very long outputs)
+        try:
+            trimmed_stdout = (stdout or "")
+            if len(trimmed_stdout) > 4000:
+                trimmed_stdout = trimmed_stdout[:4000] + "\n... [truncated]"
+            with open(context_path, "a", encoding="utf-8") as cf:
+                cf.write("=== STEP PRE ===\n")
+                cf.write(pre_exec + "\n\n")
+                cf.write(f"<ExecutedCommand>\n{command}\n\n")
+                cf.write(f"<ExitCode>\n{exit_code}\n\n")
+                cf.write(f"<Stdout>\n{trimmed_stdout}\n\n")
+        except Exception:
+            pass
+
         # Print result
         print(f"Exit code: {exit_code}")
         print(f"Stdout: {stdout}")
@@ -159,6 +199,16 @@ def main():
             }
             events_file.write(json.dumps(post_event) + "\n")
             events_file.flush()
+            # Append post context including <Next>
+            try:
+                with open(context_path, "a", encoding="utf-8") as cf:
+                    cf.write("=== STEP POST ===\n")
+                    cf.write(post_exec + "\n\n")
+            except Exception:
+                pass
+            if print_thoughts and post_exec.strip():
+                print("=== Post-exec (LLM) ===")
+                print(post_exec)
 
     # Update meta.json
     meta["ended_at"] = datetime.now(timezone.utc).isoformat().replace(':', '-').replace('+00:00', 'Z')
