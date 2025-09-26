@@ -14,7 +14,7 @@ class LLMDriver:
         self._idx = 0
         # API config
         self.provider = os.getenv("LLM_PROVIDER", "openai")
-        self.model = os.getenv("LLM_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+        self.model = os.getenv("LLM_MODEL", os.getenv("OPENAI_MODEL", "gpt-5"))
         self._orch_dir = os.path.dirname(__file__)
         self._prompt_path = os.path.join(self._orch_dir, "prompt.txt")
 
@@ -126,8 +126,8 @@ class LLMDriver:
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": content},
                 ],
-                "temperature": float(os.getenv("LLM_TEMPERATURE", "0")),
-                "max_tokens": int(os.getenv("LLM_MAX_TOKENS", "512")),
+                # "temperature": float(os.getenv("LLM_TEMPERATURE", "0")),
+                # "max_tokens": int(os.getenv("LLM_MAX_TOKENS", "512")),
             }
             data = json.dumps(body).encode("utf-8")
             req = request.Request(url, data=data, method="POST")
