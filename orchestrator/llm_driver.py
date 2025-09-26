@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import os
+import json
+import time
+from urllib import request, error
 
 class LLMDriver:
     def __init__(self, mode="manual"):
@@ -9,6 +12,11 @@ class LLMDriver:
         self._loaded = False
         self._segments = []
         self._idx = 0
+        # API config
+        self.provider = os.getenv("LLM_PROVIDER", "openai")
+        self.model = os.getenv("LLM_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+        self._orch_dir = os.path.dirname(__file__)
+        self._prompt_path = os.path.join(self._orch_dir, "prompt.txt")
 
     def _load_stream(self):
         # Read entire stdin once and split into segments on a line that equals the delimiter
@@ -39,6 +47,14 @@ class LLMDriver:
             seg = self._segments[self._idx]
             self._idx += 1
             return seg
+        elif self.mode == "api":
+            prompt = self._read_prompt()
+            content = (
+                f"{prompt}\n\n"
+                "You are the Orchestrator. Produce ONLY the pre-exec Action Protocol block with tags "
+                "<Intent>, <Command>, <Expected>, <OnError>. Do not add any extra commentary."
+            )
+            return self._invoke_llm(content)
         else:
             raise NotImplementedError(f"LLM mode '{self.mode}' not implemented")
 
@@ -63,5 +79,55 @@ class LLMDriver:
             seg = self._segments[self._idx]
             self._idx += 1
             return seg
+        elif self.mode == "api":
+            prompt = self._read_prompt()
+            content = (
+                f"{prompt}\n\n"
+                "You are the Orchestrator. Produce ONLY the post-exec Action Protocol block with tags "
+                "<Observation>, <Inference>, <Next>. Do not add any extra commentary."
+            )
+            return self._invoke_llm(content)
         else:
             raise NotImplementedError(f"LLM mode '{self.mode}' not implemented")
+
+    # Helpers for API mode
+    def _read_prompt(self) -> str:
+        try:
+            with open(self._prompt_path, "r", encoding="utf-8") as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+
+    def _invoke_llm(self, content: str) -> str:
+        if self.provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise RuntimeError("OPENAI_API_KEY not set")
+            url = "https://api.openai.com/v1/chat/completions"
+            body = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": content},
+                ],
+                "temperature": float(os.getenv("LLM_TEMPERATURE", "0")),
+                "max_tokens": int(os.getenv("LLM_MAX_TOKENS", "512")),
+            }
+            data = json.dumps(body).encode("utf-8")
+            req = request.Request(url, data=data, method="POST")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Authorization", f"Bearer {api_key}")
+            try:
+                with request.urlopen(req, timeout=30) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+            except error.HTTPError as e:
+                raise RuntimeError(f"OpenAI HTTPError: {e.code} {e.read().decode('utf-8', 'ignore')}")
+            except error.URLError as e:
+                raise RuntimeError(f"OpenAI URLError: {e.reason}")
+            # Extract content
+            try:
+                return payload["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                raise RuntimeError(f"Unexpected OpenAI response shape: {e} :: {payload}")
+        else:
+            raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
