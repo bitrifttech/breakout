@@ -13,13 +13,31 @@ else:
     sys.path.append(os.path.dirname(__file__))
     from llm_driver import LLMDriver
 
-# Environment variables
-AGENT_CONTAINER = os.getenv("AGENT_CONTAINER", "breakout_agent")
-LLM_MODE = os.getenv("LLM_MODE", "manual")
 # Paths
 ORCH_DIR = os.path.dirname(__file__)
 REPO_ROOT = os.path.abspath(os.path.join(ORCH_DIR, os.pardir))
 PROMPT_PATH = os.path.join(ORCH_DIR, "prompt.txt")
+
+def _load_dotenv_simple(path: str):
+    """Minimal .env loader: KEY=VALUE pairs, ignores comments and blanks.
+    Quotes around values are stripped. Does not support export or interpolation.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if '=' not in line:
+                    continue
+                key, val = line.split('=', 1)
+                key = key.strip()
+                val = val.strip()
+                if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                    val = val[1:-1]
+                os.environ.setdefault(key, val)
+    except FileNotFoundError:
+        pass
 
 def extract_command(pre_exec_block):
     """Extract the command from a pre-exec block.
@@ -48,7 +66,14 @@ def extract_command(pre_exec_block):
     raise ValueError("No <Command> found in pre-exec block")
 
 def main():
-    driver = LLMDriver(mode=LLM_MODE)
+    # Auto-load .env from repo root
+    _load_dotenv_simple(os.path.join(REPO_ROOT, ".env"))
+
+    # Environment variables (resolved after .env load)
+    llm_mode = os.getenv("LLM_MODE", "manual")
+    local_container = os.getenv("AGENT_CONTAINER", "breakout_agent")
+
+    driver = LLMDriver(mode=llm_mode)
 
     # Create run directory
     timestamp = datetime.now(timezone.utc).isoformat().replace(':', '-').replace('+00:00', 'Z')
@@ -60,8 +85,8 @@ def main():
     with open(PROMPT_PATH, "r", encoding="utf-8") as pf:
         prompt_text = pf.read()
     meta = {
-        "container": AGENT_CONTAINER,
-        "mode": LLM_MODE,
+        "container": local_container,
+        "mode": llm_mode,
         "prompt": prompt_text,
         "started_at": timestamp,
         "ended_at": None
@@ -94,7 +119,7 @@ def main():
         start_time = time.time()
         try:
             result = subprocess.run(
-                ["docker", "exec", AGENT_CONTAINER, "/bin/bash", "-lc", command],
+                ["docker", "exec", local_container, "/bin/bash", "-lc", command],
                 capture_output=True, text=True, timeout=60
             )
             stdout = result.stdout

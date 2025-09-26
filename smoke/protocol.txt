@@ -1,0 +1,62 @@
+<Intent>
+Map top-level directories including /world and /home/agent
+
+<Command>
+ls -la / /world /home/agent
+
+<Expected>
+Confirm world (ro) and home (rw)
+
+<OnError>
+List dirs individually
+---
+<Observation>
+/world present; /home/agent writable; baseline map OK
+
+<Inference>
+I can persist MAP/LOG/TOOLS/PLAN under /home/agent
+
+<Next>
+Initialize artifacts
+---
+<Intent>
+Initialize artifacts (MAP.md, LOG.md, TOOLS.md, PLAN.md)
+
+<Command>
+touch /home/agent/MAP.md /home/agent/LOG.md /home/agent/TOOLS.md /home/agent/PLAN.md && ls -la /home/agent
+
+<Expected>
+Files created under /home/agent
+
+<OnError>
+mkdir -p /home/agent && retry
+---
+<Observation>
+Artifacts created in /home/agent
+
+<Inference>
+Artifacts available to persist discoveries and tools
+
+<Next>
+Create parse_csv.sh and run it twice on /world/data.csv
+---
+<Intent>
+Create a reusable CSV parser tool and run it twice
+
+<Command>
+mkdir -p /home/agent/tools && printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'input="$1"' 'if [[ -z "${input:-}" ]]; then echo "usage: parse_csv.sh <csv>" >&2; exit 2; fi' 'rows=$(( $(wc -l < "$input") - 1 ))' 'echo "rows=$rows"' > /home/agent/tools/parse_csv.sh && chmod +x /home/agent/tools/parse_csv.sh && /home/agent/tools/parse_csv.sh /world/data.csv && /home/agent/tools/parse_csv.sh /world/data.csv && printf '%s\n' 'parse_csv.sh - counts CSV rows (excludes header)' 'usage: /home/agent/tools/parse_csv.sh /world/data.csv' >> /home/agent/TOOLS.md
+
+<Expected>
+Tool runs successfully twice and outputs rows count
+
+<OnError>
+Echo a fallback message to LOG.md and exit
+---
+<Observation>
+rows output seen twice; TOOLS.md updated
+
+<Inference>
+Tool reuse confirmed; artifacts updated
+
+<Next>
+Done

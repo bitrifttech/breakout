@@ -1,4 +1,5 @@
-# Simple Makefile for orchestrator project
+#!/usr/bin/make -f
+# Simple Makefile for Orchestrator project
 
 PYTHON ?= python3
 ORCH := orchestrator/main.py
@@ -7,10 +8,11 @@ RUNS_DIR := runs
 DELIM ?= ---
 CONTAINER ?= breakout_agent
 
-.PHONY: help test up down smoke score latest-run show-latest-events show-latest-meta ls-container
+.PHONY: help tests test up down smoke score latest-run show-latest-events show-latest-meta ls-container
 
 help:
 	@echo "Targets:"
+	@echo "  tests                 Alias for 'test'"
 	@echo "  test                  Run unit tests"
 	@echo "  up                    Start docker compose"
 	@echo "  down                  Stop docker compose"
@@ -21,39 +23,31 @@ help:
 	@echo "  show-latest-meta      Print latest run meta.json"
 	@echo "  ls-container          List /, /world, /home/agent inside container"
 
-# Run all unit tests
 test:
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 
-# Bring container up/down
+tests: test
+
 up:
 	docker compose up -d
 
+down:
 	docker compose down
 
 # Non-interactive smoke test using delimited mode
 # Requires container to be running. Uses BLOCK_DELIM=$(DELIM)
 smoke: up
-    cd orchestrator && \
-    LLM_MODE=delimited BLOCK_DELIM=$(DELIM) $(PYTHON) $(ORCH) <<'EOF'
-<Intent>
-Map top-level directories including /world and /home/agent
-
-<Command>
-ls -la / /world /home/agent
-{{ ... }}
-Done
-EOF
+	LLM_MODE=delimited BLOCK_DELIM=$(DELIM) $(PYTHON) $(ORCH) < smoke/protocol.txt
 
 # Score the latest run directory
 score:
-    $(PYTHON) $(SCORER) "$(ls -1dt $(RUNS_DIR)/* 2>/dev/null | head -n1)"
+	@events_dir=$$(ls -1dt $(RUNS_DIR)/* 2>/dev/null | head -n1); \
+	[ -n "$$events_dir" ] && $(PYTHON) $(SCORER) "$$events_dir" || echo "No runs found"
 
-# Print and inspect latest run artifacts
 latest-run:
 	@ls -1dt $(RUNS_DIR)/* | head -n1
 
-{{ ... }}
+show-latest-events:
 	@events_dir=$$(ls -1dt $(RUNS_DIR)/* | head -n1); \
 	[ -n "$$events_dir" ] && cat "$$events_dir/events.jsonl" || echo "No runs found"
 
@@ -61,6 +55,5 @@ show-latest-meta:
 	@events_dir=$$(ls -1dt $(RUNS_DIR)/* | head -n1); \
 	[ -n "$$events_dir" ] && cat "$$events_dir/meta.json" || echo "No runs found"
 
-# Quick container check
 ls-container:
 	docker exec $(CONTAINER) /bin/bash -lc 'ls -la / /world /home/agent'
