@@ -1,0 +1,44 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.cache/
+
+# Logs and run artifacts
+runs/
+orchestrator/runs/
+*.log
+*.jsonl
+
+# IDE/project
+.vscode/
+.idea/
+
+# Docker / env
+*.env
+.env.local
+
+# Helper scripts and temp files
+test_regex.py
+
+# Build artifacts
+dist/
+build/
