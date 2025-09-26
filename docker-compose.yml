@@ -7,12 +7,10 @@ services:
       dockerfile: sandbox/Dockerfile.agent
     container_name: breakout_agent
     volumes:
-      - agent_home:/home/agent
       - ./world:/world
     network_mode: host  # Allows internet access without proxy
     tty: true
     stdin_open: true
     command: /bin/bash
 
-volumes:
-  agent_home:
+
