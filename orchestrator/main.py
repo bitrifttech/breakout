@@ -254,7 +254,7 @@ def execute_in_container(container_name: str, command: str, timeout_s: int) -> T
     start_time = time.time()
     try:
         result = subprocess.run(
-            ["docker", "exec", container_name, "/bin/bash", "-lc", command],
+            ["docker", "exec", "-u", "0", container_name, "/bin/bash", "-lc", command],
             capture_output=True,
             text=True,
             timeout=timeout_s,
