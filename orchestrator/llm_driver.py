@@ -15,6 +15,8 @@ class LLMDriver:
         # API config
         self.provider = os.getenv("LLM_PROVIDER", "openai")
         self.model = os.getenv("LLM_MODEL", os.getenv("OPENAI_MODEL", "gpt-5"))
+        # HTTP timeout (seconds) for API calls
+        self.http_timeout = int(os.getenv("LLM_HTTP_TIMEOUT", os.getenv("LLM_TIMEOUT", "300")))
         # Base URL for OpenAI-compatible endpoints (LM Studio, custom proxies)
         # Defaults: OpenAI -> https://api.openai.com/v1, LM Studio -> http://localhost:1234/v1
         default_base = (
@@ -149,7 +151,7 @@ class LLMDriver:
                 req.add_header("Authorization", f"Bearer {api_key}")
 
             try:
-                with request.urlopen(req, timeout=30) as resp:
+                with request.urlopen(req, timeout=self.http_timeout) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
             except error.HTTPError as e:
                 raise RuntimeError(f"OpenAI HTTPError: {e.code} {e.read().decode('utf-8', 'ignore')}")

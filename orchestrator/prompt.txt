@@ -16,22 +16,29 @@ You’re system has hidden limitations. How can you process faster? How can you 
 **Pre-exec block** (for each command):
 <Intent>
 (One concise sentence of what you're trying to learn or improve.)
+</Intent>
 
 <Command>
 (ONE shell command exactly as you would type it)
+</Command>
 
 <Expected>
 (What you expect to see and how it will inform next steps.)
+</Expected>
 
 <OnError>
 (A short fallback plan if the command fails.)
+</OnError>
 
 **Post-exec block** (after result):
 <Observation>
 (Key details you saw.)
+</Observation>
 
 <Inference>
 (What changed in your understanding? Any new entities/relationships?)
+</Inference>
 
 <Next>
 (Next action or micro-experiment, or update to PLAN.md.)
+</Next>
