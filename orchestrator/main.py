@@ -240,14 +240,8 @@ def execute_in_container(container_name: str, command: str, timeout_s: int) -> T
     """Execute a shell command inside the Docker container and return (stdout, stderr, exit_code, latency_s)."""
     start_time = time.time()
     try:
-        # Optional TRACE mode: mirror output inside container and show commands as they run
-        trace_enabled = os.getenv("TRACE", "0").lower() not in ("0", "false", "no", "")
-        inner_cmd = (
-            f"exec > >(tee -a /home/agent/exec.log) 2>&1; set -x; {command}"
-            if trace_enabled else command
-        )
         result = subprocess.run(
-            ["docker", "exec", container_name, "/bin/bash", "-lc", inner_cmd],
+            ["docker", "exec", container_name, "/bin/bash", "-lc", command],
             capture_output=True,
             text=True,
             timeout=timeout_s,
@@ -315,6 +309,7 @@ def main() -> None:
                 break
 
             # Execute inside container
+            print(f"$ {command}")
             stdout, stderr, exit_code, latency_s = execute_in_container(container_name, command, command_timeout_s)
 
             # Log command event and update context
