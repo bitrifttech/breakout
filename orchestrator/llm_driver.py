@@ -9,6 +9,7 @@ class LLMDriver:
     def __init__(self, mode="manual"):
         self.mode = mode
         self.block_delim = os.getenv("BLOCK_DELIM", "---")
+        self._loaded = False
         self._segments = []
         self._idx = 0
         # API config
@@ -25,6 +26,7 @@ class LLMDriver:
 
     def _load_stream(self):
         # Read entire stdin once and split into segments on a line that equals the delimiter
+        data = sys.stdin.read()
         import re
         parts = re.split(rf"(?m)^\s*{re.escape(self.block_delim)}\s*$", data)
         self._segments = [p.strip() for p in parts if p.strip()]
