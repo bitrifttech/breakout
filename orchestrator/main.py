@@ -55,19 +55,8 @@ def extract_command(pre_exec_block: str) -> str:
     import re
 
     text = pre_exec_block or ""
-
-    # 1) Try to capture inline "Command: ..." on a single line first.
-    #    Accept variations like (Command: ...), **Command:** `...`, <Command>: ...
-    inline_pattern = re.compile(
-        r"(?mi)^[\s\*\(_\[`>]*<?\s*Command\s*>?\s*[:\-]\s*`?([^`\n]+?)`?\)?\s*$"
-    )
-    m = inline_pattern.search(text)
-    if m:
-        cmd = m.group(1).strip()
-        # Strip surrounding quotes if present
-        cmd = cmd.strip('"').strip("'")
-        if cmd:
-            return cmd
+    # Remove any <think> ... </think> sections to avoid capturing narrative mentions
+    text = re.sub(r"(?is)<\s*think\s*>.*?</\s*think\s*>", " ", text)
 
     # 2) Otherwise, find a "<Command>" tag line (possibly with markdown adornments)
     lines = text.splitlines()
@@ -76,9 +65,18 @@ def extract_command(pre_exec_block: str) -> str:
     for raw in lines:
         line = raw.strip()
         if not in_command:
-            # Normalize markdown adornments before checking for <Command>
-            md_stripped = re.sub(r"^[\*`_>\s]+|[\*`_\s]+$", "", line)
-            if re.search(r"<\s*Command\s*>", md_stripped, re.IGNORECASE):
+            # Normalize common adornments before checking for <Command>
+            # Remove leading/trailing markdown chars, quotes, parens, blockquote markers
+            md_stripped = re.sub(r"^[\*`_>\s\"'()]+|[\*`_\s\"']+$", "", line)
+            # Require the tag to be at the start (after adornments) to avoid narrative mentions
+            if re.match(r"(?i)^<\s*Command\s*>", md_stripped):
+                # Support same-line command after the tag, e.g. "<Command> echo hi" or "<Command>echo hi</Command>"
+                msl = re.search(r"(?i)<\s*Command\s*>\s*`?([^`\n<]+?)`?\s*(?:</\s*Command\s*>)?", line)
+                if msl and msl.group(1).strip():
+                    candidate = msl.group(1).strip()
+                    candidate = candidate.strip('"').strip("'")
+                    if candidate:
+                        return candidate
                 in_command = True
                 continue
         else:
@@ -98,7 +96,7 @@ def extract_command(pre_exec_block: str) -> str:
                 candidate = line
             else:
                 # If next tag appears, stop looking
-                md_stripped = re.sub(r"^[\*`_>\s]+|[\*`_\s]+$", "", line)
+                md_stripped = re.sub(r"^[\*`_>\s\"'()]+|[\*`_\s\"']+$", "", line)
                 if md_stripped.startswith("<"):
                     break
                 candidate = line
@@ -110,7 +108,22 @@ def extract_command(pre_exec_block: str) -> str:
             if candidate:
                 return candidate
 
-    raise ValueError("No <Command> found in pre-exec block")
+    # If a <Command> tag exists but we failed to extract, do not fall back to inline; surface an error
+    if re.search(r"(?i)<\s*Command\s*>", text):
+        raise ValueError("No <Command> found in pre-exec block")
+
+    # 3) As a last resort, try to capture inline "Command: ..." on a single line
+    inline_pattern = re.compile(
+        r"(?mi)^[\s\*\(_\[`>]*<?\s*Command\s*>?\s*[:\-]\s*`?([^`\n]+?)`?\)?\s*$"
+    )
+    m = inline_pattern.search(text)
+    if m:
+        cmd = m.group(1).strip()
+        cmd = cmd.strip('"').strip("'")
+        if cmd:
+            return cmd
+
+    raise ValueError("No Command found in pre-exec block")
 
 
 # ---------------------------
