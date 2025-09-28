@@ -9,18 +9,22 @@ class LLMDriver:
     def __init__(self, mode="manual"):
         self.mode = mode
         self.block_delim = os.getenv("BLOCK_DELIM", "---")
-        self._loaded = False
         self._segments = []
         self._idx = 0
         # API config
         self.provider = os.getenv("LLM_PROVIDER", "openai")
         self.model = os.getenv("LLM_MODEL", os.getenv("OPENAI_MODEL", "gpt-5"))
+        # Base URL for OpenAI-compatible endpoints (LM Studio, custom proxies)
+        # Defaults: OpenAI -> https://api.openai.com/v1, LM Studio -> http://localhost:1234/v1
+        default_base = (
+            "https://api.openai.com/v1" if self.provider == "openai" else "http://localhost:1234/v1"
+        )
+        self.base_url = os.getenv("LLM_BASE_URL", default_base)
         self._orch_dir = os.path.dirname(__file__)
         self._prompt_path = os.path.join(self._orch_dir, "prompt.txt")
 
     def _load_stream(self):
         # Read entire stdin once and split into segments on a line that equals the delimiter
-        data = sys.stdin.read()
         import re
         parts = re.split(rf"(?m)^\s*{re.escape(self.block_delim)}\s*$", data)
         self._segments = [p.strip() for p in parts if p.strip()]
@@ -115,11 +119,11 @@ class LLMDriver:
             return ""
 
     def _invoke_llm(self, content: str) -> str:
-        if self.provider == "openai":
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise RuntimeError("OPENAI_API_KEY not set")
-            url = "https://api.openai.com/v1/chat/completions"
+        provider = self.provider
+        base = (self.base_url or "").rstrip("/")
+        if provider in ("openai", "lmstudio", "openai_compatible"):
+            # Build OpenAI-compatible Chat Completions request
+            url = f"{base}/chat/completions"
             body = {
                 "model": self.model,
                 "messages": [
@@ -132,7 +136,16 @@ class LLMDriver:
             data = json.dumps(body).encode("utf-8")
             req = request.Request(url, data=data, method="POST")
             req.add_header("Content-Type", "application/json")
-            req.add_header("Authorization", f"Bearer {api_key}")
+            # Authorization header only for OpenAI or if user provides a key explicitly
+            api_key = os.getenv("OPENAI_API_KEY")
+            if provider == "openai":
+                if not api_key:
+                    raise RuntimeError("OPENAI_API_KEY not set")
+                req.add_header("Authorization", f"Bearer {api_key}")
+            elif api_key:
+                # Optional: allow sending auth to compatible proxies if provided
+                req.add_header("Authorization", f"Bearer {api_key}")
+
             try:
                 with request.urlopen(req, timeout=30) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
@@ -146,4 +159,4 @@ class LLMDriver:
             except Exception as e:
                 raise RuntimeError(f"Unexpected OpenAI response shape: {e} :: {payload}")
         else:
-            raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
+            raise NotImplementedError(f"LLM provider '{provider}' not implemented")

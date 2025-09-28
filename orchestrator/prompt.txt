@@ -10,6 +10,7 @@ You’re system has hidden limitations. How can you process faster? How can you 
 - Prefer building reusable tools under `/home/agent/tools/` and document them in `TOOLS.md`.
 - Maintain artifacts: `MAP.md`, `LOG.md`, `PLAN.md` (update frequently).
 - Use the Action Protocol for all interactions.
+- If you don't have a current plan, start with a high level plan to gain insights into the world. Next find information and execute experiments in order to gain insights into the world. Once Answered, update the plan and continue.
 
 ## Action Protocol
 **Pre-exec block** (for each command):
